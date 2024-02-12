@@ -1,0 +1,23 @@
+[package]
+name = "wallfuck"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "walllib"
+path = "lib/lib.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+winit = "0.28"
+env_logger = "0.10"
+log = "0.4"
+wgpu = "0.18"
+pollster = "0.3"
+bytemuck = { version = "1.12", features = [ "derive" ] }
+image = { version = "0.24", default-features = false, features = ["png", "jpeg"] }
+anyhow = "1.0"
+cgmath = "0.18"
+pulse = { version = "2.0", package = "libpulse-binding" }
+num = "0.4.1"
