@@ -1,8 +1,6 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::ops::Deref;
-use std::thread;
-use std::time;
 use pulse::mainloop::threaded::Mainloop;
 use pulse::context::{Context, introspect::ServerInfo, FlagSet as ContextFlagSet};
 use pulse::stream::{Stream, FlagSet as StreamFlagSet};
@@ -12,6 +10,7 @@ use pulse::mainloop::api::Mainloop as MainloopTrait; //Needs to be in scope
 
 mod dsp;
 mod fft;
+use dsp::{DSP,Chain, Mono, Absolute, LowPass, MovingAverage, Freq};
 
 pub fn process_audio() {
     let spec = Spec {
@@ -131,6 +130,18 @@ pub fn process_audio() {
     }
     stream.borrow_mut().set_state_callback(None);
 
+    // create DSP chain
+    let absolute = Rc::new(RefCell::new(Absolute::new()));
+    let moving_average = Rc::new(RefCell::new(MovingAverage::new(100)));
+    let low_pass = Rc::new(RefCell::new(LowPass::new(500 as Freq)));
+    let chain: Rc<RefCell<Chain<f64>>> = Rc::new(RefCell::new(Chain::new()));
+    chain.borrow_mut().push_back(absolute.clone());
+    chain.borrow_mut().push_back(moving_average.clone());
+    chain.borrow_mut().push_back(low_pass.clone());
+    let mut mono = Mono::new(chain.clone());
+    let test = mono.tick((0.5, 0.4));
+    println!("Test Tick : {}", test);
+
     {
         let stream_ref = Rc::clone(&stream);
         stream.borrow_mut().set_read_callback(Some(Box::new(move |nb_bytes: usize| {
@@ -151,12 +162,6 @@ pub fn process_audio() {
     }
     stream.borrow_mut().uncork(None);
     mainloop.borrow_mut().unlock();
-
-    let samples: Vec<f64> = vec![5., 19., 12., 19., 6., 11., 34., 26., 12.];
-    let res = fft::fft(&samples);
-    for r in res {
-        println!("{} + {}i", r.re, r.im);
-    }
 
     // Clean shutdown
     mainloop.borrow_mut().lock();
