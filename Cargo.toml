@@ -21,3 +21,4 @@ anyhow = "1.0"
 cgmath = "0.18"
 pulse = { version = "2.0", package = "libpulse-binding" }
 num = "0.4.1"
+byteorder = "1"

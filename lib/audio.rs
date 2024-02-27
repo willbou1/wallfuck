@@ -10,6 +10,7 @@ use pulse::mainloop::api::Mainloop as MainloopTrait; //Needs to be in scope
 
 mod dsp;
 mod fft;
+mod wav;
 use dsp::{DSP,Chain, Mono, Absolute, LowPass, MovingAverage, Freq};
 
 pub fn process_audio() {
@@ -141,6 +142,9 @@ pub fn process_audio() {
     let mut mono = Mono::new(chain.clone());
     let test = mono.tick((0.5, 0.4));
     println!("Test Tick : {}", test);
+
+    // create WAV file
+    wav::write_test_wav().unwrap();
 
     {
         let stream_ref = Rc::clone(&stream);
