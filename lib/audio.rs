@@ -11,7 +11,6 @@ use pulse::mainloop::api::Mainloop as MainloopTrait; //Needs to be in scope
 mod dsp;
 mod fft;
 mod wav;
-use dsp::{DSP,Chain, Mono, Absolute, LowPass, MovingAverage, Freq};
 
 pub fn process_audio() {
     let spec = Spec {
@@ -130,18 +129,6 @@ pub fn process_audio() {
         }
     }
     stream.borrow_mut().set_state_callback(None);
-
-    // create DSP chain
-    let absolute = Rc::new(RefCell::new(Absolute::new()));
-    let moving_average = Rc::new(RefCell::new(MovingAverage::new(100)));
-    let low_pass = Rc::new(RefCell::new(LowPass::new(500 as Freq)));
-    let chain: Rc<RefCell<Chain<f64>>> = Rc::new(RefCell::new(Chain::new()));
-    chain.borrow_mut().push_back(absolute.clone());
-    chain.borrow_mut().push_back(moving_average.clone());
-    chain.borrow_mut().push_back(low_pass.clone());
-    let mut mono = Mono::new(chain.clone());
-    let test = mono.tick((0.5, 0.4));
-    println!("Test Tick : {}", test);
 
     // create WAV file
     wav::write_test_wav().unwrap();
