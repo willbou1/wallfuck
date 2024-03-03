@@ -4,7 +4,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{Cursor, Write};
 use std::io;
 use byteorder::{LittleEndian, WriteBytesExt};
-use super::dsp::{DSPBuilder, DSPGenMono, DSPFxMono, DownSample, Oscillator, Frequency, Mono, WaveType, ADSRState};
+use super::dsp::{DSPBuilder, DSPGenMono, DSPFxMono, DownSample, Oscillator, Frequency, Mono, WaveType, ADSRState, Parallel, FxChain, Chain, MovingAverage};
 
 pub fn write_test_wav() -> io::Result<()> {
     let mut buffer = vec![];
@@ -29,32 +29,31 @@ pub fn write_test_wav() -> io::Result<()> {
     cursor.write(b"data")?; // Subchunk2ID
     cursor.write_u32::<LittleEndian>(88200 * 2 * 16 / 8)?; // Subchunk2Size
 
+    // use dsp lib to render sound
     let dsp_builder = DSPBuilder::new(44100);
     let adsr = dsp_builder.build_adsr(
         200, 0.5,
-        0.1,
+        0.4,
         100, 0.5,
-        0.08,
+        0.32,
         100, 0.5);
     adsr.borrow_mut().state = ADSRState::Attack(0);
-    let redux = dsp_builder.build_down_sample(8);
-    let modulator = dsp_builder.build_oscillator(WaveType::Sine, 4., 20.);
 
-    let d = dsp_builder.build_oscillator(WaveType::Sine, 261.6256, 0.);
-    d.borrow_mut().frequency.add_modulator(modulator.clone());
-    d.borrow_mut().amplitude.add_modulator(adsr.clone());
-    let e = dsp_builder.build_oscillator(WaveType::Sine, 329.6276, 0.);
-    e.borrow_mut().frequency.add_modulator(modulator.clone());
-    e.borrow_mut().amplitude.add_modulator(adsr.clone());
-    let g = dsp_builder.build_oscillator(WaveType::Sine, 391.9954, 0.);
-    g.borrow_mut().frequency.add_modulator(modulator.clone());
-    g.borrow_mut().amplitude.add_modulator(adsr.clone());
-    let h = dsp_builder.build_oscillator(WaveType::Sine, 493.8833, 0.);
-    h.borrow_mut().frequency.add_modulator(modulator.clone());
-    h.borrow_mut().amplitude.add_modulator(adsr.clone());
+    let sine = dsp_builder.build_oscillator(WaveType::Sine, 261.6256, 0.);
+    sine.borrow_mut().amplitude.add_modulator(adsr.clone());
+    let triangle = dsp_builder.build_oscillator(WaveType::Triangle, 261.6256, 0.);
+    triangle.borrow_mut().amplitude.add_modulator(adsr.clone());
+
+    let parallel = dsp_builder.build_parallel();
+    parallel.borrow_mut().add(sine.clone());
+    parallel.borrow_mut().add(triangle.clone());
+
+    let chain = dsp_builder.build_chain(parallel.clone());
+    let moving_average = dsp_builder.build_moving_average(100);
+    chain.borrow_mut().fx_chain.insert(moving_average.clone());
 
     for i in 0..88200 {
-        let sample = d.borrow_mut().tick(1) + e.borrow_mut().tick(1) + g.borrow_mut().tick(1) + h.borrow_mut().tick(1);
+        let sample = chain.borrow_mut().tick(1);
         if i == 83000 {
             adsr.borrow_mut().state = ADSRState::Release(0);
         }
