@@ -67,6 +67,14 @@ impl DSPBuilder {
     pub fn build_down_sample(&self, factor: u8) -> Rc<RefCell<DownSample>> {
         Rc::new(RefCell::new(DownSample::new(factor)))
     }
+    pub fn build_filter(&self,
+        kind: FilterKind,
+        order: FilterOrder,
+        cut_off: Frequency
+        ) -> Rc<RefCell<Filter>>
+    {
+        Rc::new(RefCell::new(Filter::new(kind, order, cut_off, self.sample_rate)))
+    }
     pub fn build_moving_average(&self,
         window_size: usize
         ) -> Rc<RefCell<MovingAverage>>
@@ -461,6 +469,63 @@ impl DSPFxMono for DownSample {
         }
         self.step += 1;
         self.hold
+    }
+}
+
+//==============================================================================
+pub enum FilterKind {
+    AllPass,
+    LowPass,
+    HighPass,
+}
+pub enum FilterOrder {
+    First,
+}
+pub struct Filter {
+    kind: FilterKind,
+    order: FilterOrder,
+    pub cut_off: Parameter,
+    old_cut_off: f64,
+    coefficient: f64,
+    buffer: f64,
+    sample_rate: u64,
+}
+impl Filter {
+    fn new(kind: FilterKind, order: FilterOrder, cut_off: Frequency, sample_rate: u64) -> Self {
+        Self {
+            kind,
+            order,
+            sample_rate,
+            old_cut_off: cut_off + 1.,
+            coefficient: 0.,
+            buffer: 0.,
+            cut_off: Parameter::new(cut_off),
+        }
+    }
+}
+impl DSPFxMono for Filter {
+    fn tick(&mut self, sample: Mono) -> Mono {
+        let cut_off = self.cut_off.real_value();
+        if cut_off != self.old_cut_off {
+            self.old_cut_off = cut_off;
+            self.coefficient = match self.order {
+                FilterOrder::First => {
+                    let tan = (std::f64::consts::PI * cut_off / self.sample_rate as f64).tan();
+                    (tan - 1.) / (tan + 1.)
+                },
+            };
+        }
+
+        let all_pass = match self.order {
+            FilterOrder::First =>
+                self.coefficient * sample + self.buffer,
+        };
+        self.buffer = sample - self.coefficient * all_pass;
+        match self.kind {
+            FilterKind::AllPass => all_pass,
+            FilterKind::HighPass => (sample - all_pass) / 2.,
+            FilterKind::LowPass => (sample + all_pass) / 2.,
+        }
     }
 }
 
