@@ -2,6 +2,8 @@ use std::collections::VecDeque;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::cmp;
+use rand::{thread_rng, Rng};
+use rand::rngs::ThreadRng;
 
 //==============================================================================
 // Framework details
@@ -42,13 +44,20 @@ impl DSPBuilder {
     pub fn build_parallel(&self) -> Rc<RefCell<Parallel>> {
         Rc::new(RefCell::new(Parallel::new()))
     }
+    pub fn build_noise(&self,
+        kind: NoiseKind,
+        amplitude: f64
+        ) -> Rc<RefCell<Noise>>
+    {
+        Rc::new(RefCell::new(Noise::new(kind, amplitude)))
+    }
     pub fn build_oscillator(&self,
-        wave_type: WaveType,
+        kind: WaveKind,
         frequency: Frequency,
         amplitude: f64,
         ) -> Rc<RefCell<Oscillator>>
     {
-        Rc::new(RefCell::new(Oscillator::new(wave_type, frequency, amplitude, self.sample_rate)))
+        Rc::new(RefCell::new(Oscillator::new(kind, frequency, amplitude, self.sample_rate)))
     }
     pub fn build_adsr(&self,
         attack: u64,
@@ -212,14 +221,58 @@ impl DSPGenMono for Parallel {
 //==============================================================================
 // Simple singal generators
 //==============================================================================
-pub enum WaveType {
+pub enum NoiseKind {
+    White,
+}
+pub struct Noise {
+    kind: NoiseKind,
+    pub amplitude: Parameter,
+    rng: ThreadRng,
+
+    multi_hold: Mono,
+    multi_index: usize,
+}
+impl Noise {
+    fn new(kind: NoiseKind, amplitude: f64) -> Self {
+        Self {
+            kind,
+            multi_hold: 0.,
+            multi_index: 0,
+            amplitude: Parameter::new(amplitude),
+            rng: thread_rng(),
+        }
+    }
+}
+impl DSPGenMono for Noise {
+    fn tick(&mut self, nb_connected: usize) -> Mono {
+        self.multi_index += 1;
+        if self.multi_index >= nb_connected {
+            self.multi_index = 0;
+        }
+        if self.multi_index != 0 {
+            return self.multi_hold;
+        }
+
+        let amplitude = self.amplitude.real_value();
+
+        self.multi_hold = match self.kind {
+            NoiseKind::White => if amplitude != 0. {
+                self.rng.gen_range(-amplitude..amplitude)
+            } else { 0. },
+        };
+        self.multi_hold
+    }
+}
+
+//==============================================================================
+pub enum WaveKind {
     Sine,
     Triangle,
     Square,
     Saw,
 }
 pub struct Oscillator {
-    wave_type: WaveType,
+    kind: WaveKind,
     pub frequency: Parameter,
     pub amplitude: Parameter,
     step: u64,
@@ -230,13 +283,13 @@ pub struct Oscillator {
 }
 impl Oscillator {
     fn new(
-        wave_type: WaveType,
+        kind: WaveKind,
         frequency: Frequency,
         amplitude: f64,
         sample_rate: u64
         ) -> Self {
         Self {
-            wave_type,
+            kind,
             frequency: Parameter::new(frequency),
             amplitude: Parameter::new(amplitude),
             sample_rate,
@@ -260,13 +313,13 @@ impl DSPGenMono for Oscillator {
         let frequency = self.frequency.real_value();
 
         let nb_samples_cycle = (self.sample_rate as f64 / frequency) as u64;
-        self.multi_hold = match self.wave_type {
-            WaveType::Sine => (self.step as f64 * 2f64 * std::f64::consts::PI / self.sample_rate as f64 * frequency).sin(),
-            WaveType::Square =>
+        self.multi_hold = match self.kind {
+            WaveKind::Sine => (self.step as f64 * 2f64 * std::f64::consts::PI / self.sample_rate as f64 * frequency).sin(),
+            WaveKind::Square =>
                 if self.step < nb_samples_cycle / 2 { 1. }
                 else { -1. },
-            WaveType::Saw => (2. / nb_samples_cycle as f64) * self.step as f64 - 1.,
-            WaveType::Triangle => if self.step < nb_samples_cycle / 2 {
+            WaveKind::Saw => (2. / nb_samples_cycle as f64) * self.step as f64 - 1.,
+            WaveKind::Triangle => if self.step < nb_samples_cycle / 2 {
                 (2. / (nb_samples_cycle as f64 / 2.)) * self.step as f64 - 1.
             } else {
                 (-2. / (nb_samples_cycle as f64 / 2.)) * (self.step as f64 - nb_samples_cycle as f64) - 1.
