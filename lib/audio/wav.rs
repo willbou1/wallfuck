@@ -32,7 +32,7 @@ pub fn write_test_wav() -> io::Result<()> {
     // use dsp lib to render sound
     let dsp_builder = DSPBuilder::new(44100);
     let adsr = dsp_builder.build_adsr(
-        200, 0.5,
+        300, 0.5,
         0.4,
         100, 0.5,
         0.32,
@@ -62,19 +62,14 @@ pub fn write_test_wav() -> io::Result<()> {
     parallel.borrow_mut().add(h.clone());
     parallel.borrow_mut().add(noise.clone());
 
-    let high_pass = dsp_builder.build_filter(
-        FilterKind::HighPass,
-        FilterOrder::First,
-        150.);
-    let low_pass = dsp_builder.build_filter(
-        FilterKind::LowPass,
-        FilterOrder::First,
-        800.);
-    let cut_off_mod = dsp_builder.build_oscillator(WaveKind::Sine, 4., 600.);
-    low_pass.borrow_mut().cut_off.add_modulator(cut_off_mod.clone());
+    let band_pass = dsp_builder.build_second_order_filter(
+        SecondOrderFilterKind::BandPass,
+        2000.,
+        0.033);
+    let cut_off_mod = dsp_builder.build_oscillator(WaveKind::Sine, 4., 2000.);
+    band_pass.borrow_mut().cut_off.add_modulator(cut_off_mod.clone());
     let chain = dsp_builder.build_chain(parallel.clone());
-    chain.borrow_mut().fx_chain.insert(high_pass.clone());
-    chain.borrow_mut().fx_chain.insert(low_pass.clone());
+    chain.borrow_mut().fx_chain.insert(band_pass.clone());
 
     for i in 0..88200 {
         let sample = chain.borrow_mut().tick(1);

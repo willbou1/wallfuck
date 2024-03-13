@@ -46,7 +46,7 @@ impl DSPBuilder {
     }
     pub fn build_noise(&self,
         kind: NoiseKind,
-        amplitude: f64
+        amplitude: f64,
         ) -> Rc<RefCell<Noise>>
     {
         Rc::new(RefCell::new(Noise::new(kind, amplitude)))
@@ -76,16 +76,23 @@ impl DSPBuilder {
     pub fn build_down_sample(&self, factor: u8) -> Rc<RefCell<DownSample>> {
         Rc::new(RefCell::new(DownSample::new(factor)))
     }
-    pub fn build_filter(&self,
-        kind: FilterKind,
-        order: FilterOrder,
-        cut_off: Frequency
-        ) -> Rc<RefCell<Filter>>
+    pub fn build_first_order_filter(&self,
+        kind: FirstOrderFilterKind,
+        cut_off: Frequency,
+        ) -> Rc<RefCell<FirstOrderFilter>>
     {
-        Rc::new(RefCell::new(Filter::new(kind, order, cut_off, self.sample_rate)))
+        Rc::new(RefCell::new(FirstOrderFilter::new(kind, cut_off, self.sample_rate)))
+    }
+    pub fn build_second_order_filter(&self,
+        kind: SecondOrderFilterKind,
+        cut_off: Frequency,
+        curve: f64,
+        ) -> Rc<RefCell<SecondOrderFilter>>
+    {
+        Rc::new(RefCell::new(SecondOrderFilter::new(kind, cut_off, curve, self.sample_rate)))
     }
     pub fn build_moving_average(&self,
-        window_size: usize
+        window_size: usize,
         ) -> Rc<RefCell<MovingAverage>>
     {
         Rc::new(RefCell::new(MovingAverage::new(window_size)))
@@ -95,7 +102,7 @@ impl DSPBuilder {
         Rc::new(RefCell::new(Absolute::new()))
     }
     pub fn build_operator<F>(&self,
-        operator: F
+        operator: F,
         ) -> Rc<RefCell<Operator<F>>> where
         F: Fn(f64) -> f64
     {
@@ -526,28 +533,23 @@ impl DSPFxMono for DownSample {
 }
 
 //==============================================================================
-pub enum FilterKind {
+pub enum FirstOrderFilterKind {
     AllPass,
     LowPass,
     HighPass,
 }
-pub enum FilterOrder {
-    First,
-}
-pub struct Filter {
-    kind: FilterKind,
-    order: FilterOrder,
+pub struct FirstOrderFilter {
+    kind: FirstOrderFilterKind,
     pub cut_off: Parameter,
     old_cut_off: f64,
     coefficient: f64,
     buffer: f64,
     sample_rate: u64,
 }
-impl Filter {
-    fn new(kind: FilterKind, order: FilterOrder, cut_off: Frequency, sample_rate: u64) -> Self {
+impl FirstOrderFilter {
+    fn new(kind: FirstOrderFilterKind, cut_off: Frequency, sample_rate: u64) -> Self {
         Self {
             kind,
-            order,
             sample_rate,
             old_cut_off: cut_off + 1.,
             coefficient: 0.,
@@ -556,28 +558,86 @@ impl Filter {
         }
     }
 }
-impl DSPFxMono for Filter {
+impl DSPFxMono for FirstOrderFilter {
     fn tick(&mut self, sample: Mono) -> Mono {
         let cut_off = self.cut_off.real_value();
         if cut_off != self.old_cut_off {
             self.old_cut_off = cut_off;
-            self.coefficient = match self.order {
-                FilterOrder::First => {
-                    let tan = (std::f64::consts::PI * cut_off / self.sample_rate as f64).tan();
-                    (tan - 1.) / (tan + 1.)
-                },
-            };
+            let tan = (std::f64::consts::PI * cut_off / self.sample_rate as f64).tan();
+            self.coefficient = (tan - 1.) / (tan + 1.);
         }
 
-        let all_pass = match self.order {
-            FilterOrder::First =>
-                self.coefficient * sample + self.buffer,
-        };
+        let all_pass = self.coefficient * sample + self.buffer;
         self.buffer = sample - self.coefficient * all_pass;
         match self.kind {
-            FilterKind::AllPass => all_pass,
-            FilterKind::HighPass => (sample - all_pass) / 2.,
-            FilterKind::LowPass => (sample + all_pass) / 2.,
+            FirstOrderFilterKind::AllPass => all_pass,
+            FirstOrderFilterKind::HighPass => (sample - all_pass) / 2.,
+            FirstOrderFilterKind::LowPass => (sample + all_pass) / 2.,
+        }
+    }
+}
+
+pub enum SecondOrderFilterKind {
+    AllPass,
+    BandStop,
+    BandPass,
+}
+pub struct SecondOrderFilter {
+    kind: SecondOrderFilterKind,
+    pub cut_off: Parameter,
+    pub curve: Parameter,
+    old_cut_off: f64,
+    old_curve: f64,
+    d: f64,
+    c: f64,
+    buffer: [f64; 2],
+    sample_rate: u64,
+}
+impl SecondOrderFilter {
+    fn new(
+        kind: SecondOrderFilterKind,
+        cut_off: Frequency,
+        curve: f64,
+        sample_rate: u64,
+        ) -> Self
+    {
+        Self {
+            kind,
+            sample_rate,
+            old_cut_off: cut_off + 1.,
+            old_curve: curve + 1.,
+            c: 0.,
+            d: 0.,
+            buffer: [0., 0.],
+            cut_off: Parameter::new(cut_off),
+            curve: Parameter::new(curve),
+        }
+    }
+}
+impl DSPFxMono for SecondOrderFilter {
+    fn tick(&mut self, sample: Mono) -> Mono {
+        let cut_off = self.cut_off.real_value();
+        let curve = self.curve.real_value();
+        let sample_rate = self.sample_rate as f64;
+        if cut_off != self.old_cut_off {
+            self.old_cut_off = cut_off;
+            self.d = -(2. * std::f64::consts::PI * cut_off / sample_rate).cos();
+        }
+        if curve != self.old_curve {
+            self.old_curve = curve;
+            let tan = (std::f64::consts::PI * curve).tan();
+            self.c = (tan - 1.) / (tan + 1.);
+        }
+
+        let d_c = self.d * (1. - self.c);
+        let v = sample - d_c * self.buffer[0] + self.c * self.buffer[1];
+        let all_pass = -self.c * v + d_c * self.buffer[0] + self.buffer[1];
+        self.buffer[0] = v;
+        self.buffer[1] = self.buffer[0];
+        match self.kind {
+            SecondOrderFilterKind::AllPass => all_pass,
+            SecondOrderFilterKind::BandPass => (sample - all_pass) / 2.,
+            SecondOrderFilterKind::BandStop => (sample + all_pass) / 2.,
         }
     }
 }

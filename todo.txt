@@ -1,0 +1,5 @@
+- Implement low-pass filter based on the second-order all-pass filter
+- Make it so that it is possible to disable a sound generator
+- Add a way to bypass audio effects
+- Rewrite WAV file logic in a cleaner way
+- Find a way to pass the signal to opengl
