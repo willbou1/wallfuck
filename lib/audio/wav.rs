@@ -37,8 +37,14 @@ pub fn write_test_wav() -> io::Result<()> {
         100, 0.5,
         0.32,
         100, 0.5);
+    let noise_adsr = dsp_builder.build_adsr(
+        300, 0.5,
+        0.2,
+        100, 0.5,
+        0.12,
+        100, 0.5);
     adsr.borrow_mut().state = ADSRState::Attack(0);
-    let modulator = dsp_builder.build_oscillator(WaveKind::Sine, 4., 3.);
+    let modulator = dsp_builder.build_oscillator(WaveKind::Sine, 4., 2.);
 
     let d = dsp_builder.build_oscillator(WaveKind::Saw, 261.6256, 0.);
     d.borrow_mut().frequency.add_modulator(modulator.clone());
@@ -53,7 +59,7 @@ pub fn write_test_wav() -> io::Result<()> {
     h.borrow_mut().frequency.add_modulator(modulator.clone());
     h.borrow_mut().amplitude.add_modulator(adsr.clone());
     let noise = dsp_builder.build_noise(NoiseKind::White, 0.);
-    noise.borrow_mut().amplitude.add_modulator(adsr.clone());
+    noise.borrow_mut().amplitude.add_modulator(noise_adsr.clone());
 
     let parallel = dsp_builder.build_parallel();
     parallel.borrow_mut().add(d.clone());
@@ -62,20 +68,28 @@ pub fn write_test_wav() -> io::Result<()> {
     parallel.borrow_mut().add(h.clone());
     parallel.borrow_mut().add(noise.clone());
 
-    let band_pass = dsp_builder.build_second_order_filter(
-        SecondOrderFilterKind::BandPass,
-        2000.,
-        0.033);
-    let cut_off_mod = dsp_builder.build_oscillator(WaveKind::Sine, 4., 2000.);
-    band_pass.borrow_mut().cut_off.add_modulator(cut_off_mod.clone());
+    let high_pass = dsp_builder.build_first_order_filter(
+        FirstOrderFilterKind::HighPass,
+        150.);
+    let low_pass = dsp_builder.build_first_order_filter(
+        FirstOrderFilterKind::LowPass,
+        600.);
+    let cut_off_mod = dsp_builder.build_oscillator(WaveKind::Sine, 4., 400.);
+    low_pass.borrow_mut().cut_off.add_modulator(cut_off_mod.clone());
     let chain = dsp_builder.build_chain(parallel.clone());
-    chain.borrow_mut().fx_chain.insert(band_pass.clone());
+    chain.borrow_mut().fx_chain.insert(high_pass.clone());
+    chain.borrow_mut().fx_chain.insert(low_pass.clone());
 
     for i in 0..88200 {
-        let sample = chain.borrow_mut().tick(1);
         if i == 83000 {
             adsr.borrow_mut().state = ADSRState::Release(0);
+        } else if i == 44100 {
+            e.borrow_mut().enabled.value = 0.;
+            g.borrow_mut().enabled.value = 0.;
+            h.borrow_mut().enabled.value = 0.;
+            noise.borrow_mut().enabled.value = 0.;
         }
+        let sample = chain.borrow_mut().tick(1).unwrap_or(0.);
         let processed_sample = if sample >= 0f64 {
             (sample * std::i16::MAX as f64 * 0.5) as i16
         } else {

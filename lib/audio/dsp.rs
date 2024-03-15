@@ -14,7 +14,7 @@ pub type Mono = f64;
 pub type Stereo = (f64, f64);
 
 pub trait DSPGenMono {
-    fn tick(&mut self, nb_connected: usize) -> Mono;
+    fn tick(&mut self, nb_connected: usize) -> Option<Mono>;
 }
 
 pub trait DSPFxMono {
@@ -70,7 +70,8 @@ impl DSPBuilder {
         release_curve: f64,
         ) -> Rc<RefCell<ADSR>>
     {
-        Rc::new(RefCell::new(ADSR::new(attack, attack_curve, peak, decay, decay_curve, sustain, release, release_curve, self.sample_rate)))
+        Rc::new(RefCell::new(ADSR::new(attack, attack_curve, peak, decay,
+                    decay_curve, sustain, release, release_curve, self.sample_rate)))
     }
 
     pub fn build_down_sample(&self, factor: u8) -> Rc<RefCell<DownSample>> {
@@ -132,7 +133,7 @@ impl Parameter {
             if count > 1 {
                 count -= 1;
             }
-            value += modulator.borrow_mut().tick(count);
+            value += modulator.borrow_mut().tick(count).unwrap_or(0.);
         }
         value
     }
@@ -146,6 +147,7 @@ impl Parameter {
 pub struct Chain {
     module: Rc<RefCell<dyn DSPGenMono>>,
     pub fx_chain: FxChain,
+    pub enabled: Parameter,
 
     multi_hold: Mono,
     multi_index: usize,
@@ -155,34 +157,44 @@ impl Chain {
         Self {
             module,
             fx_chain: FxChain::new(),
+            enabled: Parameter::new(1.),
             multi_hold: 0.,
             multi_index: 0,
         }
     }
 }
 impl DSPGenMono for Chain {
-    fn tick(&mut self, nb_connected: usize) -> Mono {
+    fn tick(&mut self, nb_connected: usize) -> Option<Mono> {
+        if self.enabled.real_value() == 0. {
+            return None;
+        }
+
         self.multi_index += 1;
         if self.multi_index >= nb_connected {
             self.multi_index = 0;
         }
         if self.multi_index != 0 {
-            return self.multi_hold;
+            return Some(self.multi_hold);
         }
 
         let mut count = Rc::strong_count(&self.module);
         if count > 1 {
             count -= 1;
         }
-        self.multi_hold = self.module.borrow_mut().tick(count);
-        self.multi_hold = self.fx_chain.tick(self.multi_hold);
-        self.multi_hold
+        match self.module.borrow_mut().tick(count) {
+            Some(sample) => {
+                self.multi_hold = self.fx_chain.tick(sample);
+                Some(self.multi_hold)
+            },
+            None => None,
+        }
     }
 }
 
 //==============================================================================
 pub struct Parallel {
     modules: Vec<Rc<RefCell<dyn DSPGenMono>>>,
+    pub enabled: Parameter,
 
     multi_hold: Mono,
     multi_index: usize,
@@ -191,6 +203,7 @@ impl Parallel {
     fn new() -> Self {
         Self {
             modules: vec![],
+            enabled: Parameter::new(1.),
             multi_hold: 0.,
             multi_index: 0,
         }
@@ -200,15 +213,20 @@ impl Parallel {
     }
 }
 impl DSPGenMono for Parallel {
-    fn tick(&mut self, nb_connected: usize) -> Mono {
+    fn tick(&mut self, nb_connected: usize) -> Option<Mono> {
+        if self.enabled.real_value() == 0. {
+            return None;
+        }
+
         self.multi_index += 1;
         if self.multi_index >= nb_connected {
             self.multi_index = 0;
         }
         if self.multi_index != 0 {
-            return self.multi_hold;
+            return Some(self.multi_hold);
         }
 
+        let mut nb_enabled = 0;
         self.multi_hold = 0.;
         for module in &self.modules {
             let mut count = Rc::strong_count(module);
@@ -216,10 +234,15 @@ impl DSPGenMono for Parallel {
                 count -= 1;
             }
 
-            self.multi_hold += module.borrow_mut().tick(count);
+            if let Some(sample) = module.borrow_mut().tick(count) {
+                self.multi_hold += sample;
+                nb_enabled += 1;
+            }
         }
-        self.multi_hold != self.modules.len() as f64;
-        self.multi_hold
+        if nb_enabled > 1 {
+            self.multi_hold != self.modules.len() as f64;
+        }
+        Some(self.multi_hold)
     }
 }
 
@@ -234,6 +257,7 @@ pub enum NoiseKind {
 pub struct Noise {
     kind: NoiseKind,
     pub amplitude: Parameter,
+    pub enabled: Parameter,
     rng: ThreadRng,
 
     multi_hold: Mono,
@@ -246,28 +270,32 @@ impl Noise {
             multi_hold: 0.,
             multi_index: 0,
             amplitude: Parameter::new(amplitude),
+            enabled: Parameter::new(1.),
             rng: thread_rng(),
         }
     }
 }
 impl DSPGenMono for Noise {
-    fn tick(&mut self, nb_connected: usize) -> Mono {
+    fn tick(&mut self, nb_connected: usize) -> Option<Mono> {
+        let amplitude = self.amplitude.real_value();
+        if self.enabled.real_value() == 0. {
+            return None;
+        }
+
         self.multi_index += 1;
         if self.multi_index >= nb_connected {
             self.multi_index = 0;
         }
         if self.multi_index != 0 {
-            return self.multi_hold;
+            return Some(self.multi_hold);
         }
-
-        let amplitude = self.amplitude.real_value();
 
         self.multi_hold = match self.kind {
             NoiseKind::White => if amplitude != 0. {
                 self.rng.gen_range(-amplitude..amplitude)
             } else { 0. },
         };
-        self.multi_hold
+        Some(self.multi_hold)
     }
 }
 
@@ -282,6 +310,7 @@ pub struct Oscillator {
     kind: WaveKind,
     pub frequency: Parameter,
     pub amplitude: Parameter,
+    pub enabled: Parameter,
     step: u64,
     sample_rate: u64,
 
@@ -299,6 +328,7 @@ impl Oscillator {
             kind,
             frequency: Parameter::new(frequency),
             amplitude: Parameter::new(amplitude),
+            enabled: Parameter::new(1.),
             sample_rate,
             step: 0,
             multi_hold: 0.,
@@ -307,17 +337,20 @@ impl Oscillator {
     }
 }
 impl DSPGenMono for Oscillator {
-    fn tick(&mut self, nb_connected: usize) -> Mono {
+    fn tick(&mut self, nb_connected: usize) -> Option<Mono> {
+        let amplitude = self.amplitude.real_value();
+        let frequency = self.frequency.real_value();
+        if self.enabled.real_value() == 0. {
+            return None;
+        }
+
         self.multi_index += 1;
         if self.multi_index >= nb_connected {
             self.multi_index = 0;
         }
         if self.multi_index != 0 {
-            return self.multi_hold;
+            return Some(self.multi_hold);
         }
-
-        let amplitude = self.amplitude.real_value();
-        let frequency = self.frequency.real_value();
 
         let nb_samples_cycle = (self.sample_rate as f64 / frequency) as u64;
         self.multi_hold = match self.kind {
@@ -336,7 +369,7 @@ impl DSPGenMono for Oscillator {
         if self.step >= nb_samples_cycle {
             self.step = 0;
         }
-        self.multi_hold
+        Some(self.multi_hold)
     }
 }
 
@@ -350,6 +383,7 @@ pub enum ADSRState {
 }
 pub struct ADSR {
     pub state: ADSRState,
+    pub enabled: Parameter,
     attack: u64,
     attack_curve: f64,
     peak: f64,
@@ -386,19 +420,24 @@ impl ADSR {
             release_curve,
             sample_rate,
             state: ADSRState::Off,
+            enabled: Parameter::new(1.),
             multi_hold: 0.,
             multi_index: 0,
         }
     }
 }
 impl DSPGenMono for ADSR {
-    fn tick(&mut self, nb_connected: usize) -> Mono {
+    fn tick(&mut self, nb_connected: usize) -> Option<Mono> {
+        if self.enabled.real_value() == 0. {
+            return None;
+        }
+
         self.multi_index += 1;
         if self.multi_index >= nb_connected {
             self.multi_index = 0;
         }
         if self.multi_index != 0 {
-            return self.multi_hold;
+            return Some(self.multi_hold);
         }
 
         let nb_samples_ms = |ms: u64| (ms as f64 / 1000. * self.sample_rate as f64).round();
@@ -436,7 +475,7 @@ impl DSPGenMono for ADSR {
             },
             ADSRState::Off => 0.,
         };
-        self.multi_hold
+        Some(self.multi_hold)
     }
 }
 
@@ -447,11 +486,13 @@ impl DSPGenMono for ADSR {
 //==============================================================================
 pub struct FxChain {
     effects: VecDeque<Rc<RefCell<dyn DSPFxMono>>>,
+    pub enabled: Parameter,
 }
 impl FxChain {
     pub fn new() -> Self {
         Self {
             effects: VecDeque::new(),
+            enabled: Parameter::new(1.),
         }
     }
     pub fn insert(&mut self, effect: Rc<RefCell<dyn DSPFxMono>>) {
@@ -463,6 +504,10 @@ impl FxChain {
 }
 impl DSPFxMono for FxChain {
     fn tick(&mut self, mut sample: Mono) -> Mono {
+        if self.enabled.real_value() == 0. {
+            return sample;
+        }
+
         for effect in &self.effects {
             sample = effect.borrow_mut().tick(sample);
         }
@@ -475,10 +520,14 @@ impl DSPFxMono for FxChain {
 //==============================================================================
 // Simple mono effects
 //==============================================================================
-pub struct Absolute {}
+pub struct Absolute {
+    pub enabled: Parameter,
+}
 impl Absolute {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            enabled: Parameter::new(1.),
+        }
     }
 }
 impl DSPFxMono for Absolute {
@@ -490,18 +539,26 @@ impl DSPFxMono for Absolute {
 //==============================================================================
 pub struct Operator<F> {
     operator: F,
+    pub enabled: Parameter,
 }
 impl<F> Operator<F> where
     F: Fn(f64) -> f64,
 {
     pub fn new(operator: F) -> Self {
-        Self { operator }
+        Self {
+            operator,
+            enabled: Parameter::new(1.),
+        }
     }
 }
 impl<F> DSPFxMono for Operator<F> where
     F: Fn(f64) -> f64,
 {
     fn tick(&mut self, sample: f64) -> f64 {
+        if self.enabled.real_value() == 0. {
+            return sample;
+        }
+
         (self.operator)(sample)
     }
 }
@@ -511,6 +568,7 @@ pub struct DownSample {
     factor: u8,
     hold: f64,
     step: u8,
+    pub enabled: Parameter,
 }
 impl DownSample {
     fn new(factor: u8) -> Self {
@@ -518,11 +576,16 @@ impl DownSample {
             factor,
             hold: 0.,
             step: 0,
+            enabled: Parameter::new(1.),
         }
     }
 }
 impl DSPFxMono for DownSample {
     fn tick(&mut self, sample: Mono) -> Mono {
+        if self.enabled.real_value() == 0. {
+            return sample;
+        }
+
         if self.step % self.factor == 0 {
             self.hold = sample;
             self.step = 0;
@@ -541,6 +604,7 @@ pub enum FirstOrderFilterKind {
 pub struct FirstOrderFilter {
     kind: FirstOrderFilterKind,
     pub cut_off: Parameter,
+    pub enabled: Parameter,
     old_cut_off: f64,
     coefficient: f64,
     buffer: f64,
@@ -555,12 +619,17 @@ impl FirstOrderFilter {
             coefficient: 0.,
             buffer: 0.,
             cut_off: Parameter::new(cut_off),
+            enabled: Parameter::new(1.),
         }
     }
 }
 impl DSPFxMono for FirstOrderFilter {
     fn tick(&mut self, sample: Mono) -> Mono {
         let cut_off = self.cut_off.real_value();
+        if self.enabled.real_value() == 0. {
+            return sample;
+        }
+
         if cut_off != self.old_cut_off {
             self.old_cut_off = cut_off;
             let tan = (std::f64::consts::PI * cut_off / self.sample_rate as f64).tan();
@@ -586,6 +655,7 @@ pub struct SecondOrderFilter {
     kind: SecondOrderFilterKind,
     pub cut_off: Parameter,
     pub curve: Parameter,
+    pub enabled: Parameter,
     old_cut_off: f64,
     old_curve: f64,
     d: f64,
@@ -611,6 +681,7 @@ impl SecondOrderFilter {
             buffer: [0., 0.],
             cut_off: Parameter::new(cut_off),
             curve: Parameter::new(curve),
+            enabled: Parameter::new(1.),
         }
     }
 }
@@ -618,6 +689,10 @@ impl DSPFxMono for SecondOrderFilter {
     fn tick(&mut self, sample: Mono) -> Mono {
         let cut_off = self.cut_off.real_value();
         let curve = self.curve.real_value();
+        if self.enabled.real_value() == 0. {
+            return sample;
+        }
+
         let sample_rate = self.sample_rate as f64;
         if cut_off != self.old_cut_off {
             self.old_cut_off = cut_off;
@@ -648,6 +723,7 @@ pub struct MovingAverage {
     processed: usize,
     index: usize,
     buffer: Vec<f64>,
+    pub enabled: Parameter,
 }
 impl MovingAverage {
     fn new(window_size: usize) -> Self{
@@ -656,6 +732,7 @@ impl MovingAverage {
             processed: 0,
             buffer: vec![0.; window_size],
             index: 0,
+            enabled: Parameter::new(1.),
         }
     }
     pub fn set_window_size(&mut self, window_size: usize) {
@@ -680,6 +757,10 @@ impl MovingAverage {
 }
 impl DSPFxMono for MovingAverage {
     fn tick(&mut self, sample: Mono) -> Mono {
+        if self.enabled.real_value() == 0. {
+            return sample;
+        }
+
         self.index = if self.index == self.window_size - 1 {
             0
         } else {
