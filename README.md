@@ -3,11 +3,11 @@ Wallpaper engine for Linux
 
 My objective is to implement everything I can from scratch. Hopefully, I can learn a lot about AV programming that way :)
 
-#What I've managed to implement
-##Video
+# What I've managed to implement
+## Video
 - Displays an image with the proper aspect ratio even if the window is resized
-##Audio
-###DSP
+## Audio
+### DSP
 - Oscillators (Sine, Triangle, Square, Saw) with frequency and amplitude modulation
 - White noise (uniform distribution from -1 to 1)
 - Filters based on the first-order all-pass filter (all-pass, low-pass, high-pass) with cut-off modulation
@@ -20,7 +20,7 @@ My objective is to implement everything I can from scratch. Hopefully, I can lea
 - Downsampler
 - Mathematical operators
 - Absolute value
-###Misc
+### Misc
 - Write to WAV file
 - Fast fourier transform
 - Inverse fast fourier transform
