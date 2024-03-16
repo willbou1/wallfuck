@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use super::*;
 
 use std::collections::VecDeque;
@@ -55,7 +57,7 @@ impl DSPBuilder {
 // Complex mono effects
 //==============================================================================
 pub struct FxChain {
-    effects: VecDeque<Rc<RefCell<dyn DSPFxMono>>>,
+    effects: VecDeque<Rc<RefCell<dyn DSPMonoEffect>>>,
     pub enabled: Parameter,
 }
 impl FxChain {
@@ -65,14 +67,14 @@ impl FxChain {
             enabled: Parameter::new(1.),
         }
     }
-    pub fn insert(&mut self, effect: Rc<RefCell<dyn DSPFxMono>>) {
+    pub fn insert(&mut self, effect: Rc<RefCell<dyn DSPMonoEffect>>) {
         self.effects.push_front(effect);
     }
-    pub fn append(&mut self, effect: Rc<RefCell<dyn DSPFxMono>>) {
+    pub fn append(&mut self, effect: Rc<RefCell<dyn DSPMonoEffect>>) {
         self.effects.push_back(effect);
     }
 }
-impl DSPFxMono for FxChain {
+impl DSPMonoEffect for FxChain {
     fn tick(&mut self, mut sample: Mono) -> Mono {
         if self.enabled.real_value() == 0. {
             return sample;
@@ -100,7 +102,7 @@ impl Absolute {
         }
     }
 }
-impl DSPFxMono for Absolute {
+impl DSPMonoEffect for Absolute {
     fn tick(&mut self, sample: f64) -> f64 {
         sample.abs()
     }
@@ -121,7 +123,7 @@ impl<F> Operator<F> where
         }
     }
 }
-impl<F> DSPFxMono for Operator<F> where
+impl<F> DSPMonoEffect for Operator<F> where
     F: Fn(f64) -> f64,
 {
     fn tick(&mut self, sample: f64) -> f64 {
@@ -150,7 +152,7 @@ impl DownSample {
         }
     }
 }
-impl DSPFxMono for DownSample {
+impl DSPMonoEffect for DownSample {
     fn tick(&mut self, sample: Mono) -> Mono {
         if self.enabled.real_value() == 0. {
             return sample;
@@ -193,7 +195,7 @@ impl FirstOrderFilter {
         }
     }
 }
-impl DSPFxMono for FirstOrderFilter {
+impl DSPMonoEffect for FirstOrderFilter {
     fn tick(&mut self, sample: Mono) -> Mono {
         let cut_off = self.cut_off.real_value();
         if self.enabled.real_value() == 0. {
@@ -255,7 +257,7 @@ impl SecondOrderFilter {
         }
     }
 }
-impl DSPFxMono for SecondOrderFilter {
+impl DSPMonoEffect for SecondOrderFilter {
     fn tick(&mut self, sample: Mono) -> Mono {
         let cut_off = self.cut_off.real_value();
         let curve = self.curve.real_value();
@@ -325,7 +327,7 @@ impl MovingAverage {
         self.index = self.processed - 1;
     }
 }
-impl DSPFxMono for MovingAverage {
+impl DSPMonoEffect for MovingAverage {
     fn tick(&mut self, sample: Mono) -> Mono {
         if self.enabled.real_value() == 0. {
             return sample;

@@ -13,15 +13,15 @@ pub type Ms = f64;
 pub type Mono = f64;
 pub type Stereo = (f64, f64);
 
-pub trait DSPGenMono {
+pub trait DSPMonoGenerator {
     fn tick(&mut self, nb_connected: usize) -> Option<Mono>;
 }
 
-pub trait DSPFxMono {
+pub trait DSPMonoEffect {
     fn tick(&mut self, sample: Mono) -> Mono;
 }
 
-pub trait DSPFxStereo {
+pub trait DSPStereoEffect {
     fn tick(&mut self, sample: Mono) -> Mono;
 }
 
@@ -37,7 +37,7 @@ impl DSPBuilder {
 //==============================================================================
 pub struct Parameter {
     pub value: f64,
-    modulators: Vec<Rc<RefCell<dyn DSPGenMono>>>,
+    modulators: Vec<Rc<RefCell<dyn DSPMonoGenerator>>>,
 }
 impl Parameter {
     pub fn new(value: f64) -> Self {
@@ -46,7 +46,7 @@ impl Parameter {
             modulators: vec![],
         }
     }
-    pub fn add_modulator(&mut self, modulator: Rc<RefCell<dyn DSPGenMono>>) {
+    pub fn add_modulator(&mut self, modulator: Rc<RefCell<dyn DSPMonoGenerator>>) {
         self.modulators.push(modulator);
     }
     pub fn real_value(&self) -> f64 {

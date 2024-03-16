@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use super::*;
 
 use std::cell::RefCell;
@@ -12,7 +14,7 @@ use super::effects::FxChain;
 //==============================================================================
 impl DSPBuilder {
     pub fn build_chain(&self,
-        module: Rc<RefCell<dyn DSPGenMono>>,
+        module: Rc<RefCell<dyn DSPMonoGenerator>>,
         ) -> Rc<RefCell<Chain>>
     {
         Rc::new(RefCell::new(Chain::new(module)))
@@ -57,7 +59,7 @@ impl DSPBuilder {
 // Complex singal generators
 //==============================================================================
 pub struct Chain {
-    module: Rc<RefCell<dyn DSPGenMono>>,
+    module: Rc<RefCell<dyn DSPMonoGenerator>>,
     pub fx_chain: FxChain,
     pub enabled: Parameter,
 
@@ -65,7 +67,7 @@ pub struct Chain {
     multi_index: usize,
 }
 impl Chain {
-    pub fn new(module: Rc<RefCell<dyn DSPGenMono>>) -> Self {
+    pub fn new(module: Rc<RefCell<dyn DSPMonoGenerator>>) -> Self {
         Self {
             module,
             fx_chain: FxChain::new(),
@@ -75,7 +77,7 @@ impl Chain {
         }
     }
 }
-impl DSPGenMono for Chain {
+impl DSPMonoGenerator for Chain {
     fn tick(&mut self, nb_connected: usize) -> Option<Mono> {
         if self.enabled.real_value() == 0. {
             return None;
@@ -105,7 +107,7 @@ impl DSPGenMono for Chain {
 
 //==============================================================================
 pub struct Parallel {
-    modules: Vec<Rc<RefCell<dyn DSPGenMono>>>,
+    modules: Vec<Rc<RefCell<dyn DSPMonoGenerator>>>,
     pub enabled: Parameter,
 
     multi_hold: Mono,
@@ -120,11 +122,11 @@ impl Parallel {
             multi_index: 0,
         }
     }
-    pub fn add(&mut self, module: Rc<RefCell<dyn DSPGenMono>>) {
+    pub fn add(&mut self, module: Rc<RefCell<dyn DSPMonoGenerator>>) {
         self.modules.push(module);
     }
 }
-impl DSPGenMono for Parallel {
+impl DSPMonoGenerator for Parallel {
     fn tick(&mut self, nb_connected: usize) -> Option<Mono> {
         if self.enabled.real_value() == 0. {
             return None;
@@ -187,7 +189,7 @@ impl Noise {
         }
     }
 }
-impl DSPGenMono for Noise {
+impl DSPMonoGenerator for Noise {
     fn tick(&mut self, nb_connected: usize) -> Option<Mono> {
         let amplitude = self.amplitude.real_value();
         if self.enabled.real_value() == 0. {
@@ -248,7 +250,7 @@ impl Oscillator {
         }
     }
 }
-impl DSPGenMono for Oscillator {
+impl DSPMonoGenerator for Oscillator {
     fn tick(&mut self, nb_connected: usize) -> Option<Mono> {
         let amplitude = self.amplitude.real_value();
         let frequency = self.frequency.real_value();
@@ -339,7 +341,7 @@ impl ADSR {
         }
     }
 }
-impl DSPGenMono for ADSR {
+impl DSPMonoGenerator for ADSR {
     fn tick(&mut self, nb_connected: usize) -> Option<Mono> {
         if self.enabled.real_value() == 0. {
             return None;
