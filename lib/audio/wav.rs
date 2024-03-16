@@ -1,10 +1,11 @@
-use std::rc::Rc;
-use std::cell::RefCell;
 use std::fs::{File, OpenOptions};
 use std::io::{Cursor, Write};
 use std::io;
 use byteorder::{LittleEndian, WriteBytesExt};
+
 use super::dsp::*;
+use super::dsp::generators::*;
+use super::dsp::effects::*;
 
 pub fn write_test_wav() -> io::Result<()> {
     let mut buffer = vec![];
