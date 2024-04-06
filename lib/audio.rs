@@ -9,6 +9,8 @@ use pulse::proplist::Proplist;
 use pulse::mainloop::api::Mainloop as MainloopTrait; //Needs to be in scope
 
 mod dsp;
+use dsp::*;
+use dsp::effects::*;
 mod fft;
 mod wav;
 
@@ -132,6 +134,23 @@ pub fn process_audio() {
 
     // create WAV file
     wav::write_test_wav().unwrap();
+
+    // https://www.youtube.com/watch?v=QeC_cSnF2BM&t=286s
+    let builder = DSPBuilder::new(44100);
+    let low_pass = builder.build_first_order_filter(
+        FirstOrderFilterKind::LowPass, 500.
+    );
+    let absolute = builder.build_operator(|sample| sample.abs());
+    let moving_average = builder.build_moving_average(100);
+    let slide = builder.build_slide(0., 1000.);
+    let amplifier_1 = builder.build_amplifier(4.);
+
+    let amplifier_2 = builder.build_amplifier(2.);
+    let clip = builder.build_operator(|sample|
+        if sample < 0. { 0. }
+        else if sample > 1. { 1. }
+        else { sample }
+    );
 
     {
         let stream_ref = Rc::clone(&stream);

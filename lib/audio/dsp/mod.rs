@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
+use mockall::{automock, predicate::*};
 
 //==============================================================================
 // Framework glue
@@ -13,14 +14,17 @@ pub type Ms = f64;
 pub type Mono = f64;
 pub type Stereo = (f64, f64);
 
+#[cfg_attr(test, automock)]
 pub trait DSPMonoGenerator {
     fn tick(&mut self, nb_connected: usize) -> Option<Mono>;
 }
 
+#[cfg_attr(test, automock)]
 pub trait DSPMonoEffect {
     fn tick(&mut self, sample: Mono) -> Mono;
 }
 
+#[cfg_attr(test, automock)]
 pub trait DSPStereoEffect {
     fn tick(&mut self, sample: Mono) -> Mono;
 }
@@ -61,4 +65,3 @@ impl Parameter {
         value
     }
 }
-
