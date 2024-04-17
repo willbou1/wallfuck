@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/nixos.org) (preloaded format=pdflatex 1980.1.1)  16 APR 2024 19:11
+This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/nixos.org) (preloaded format=pdflatex 1980.1.1)  16 APR 2024 21:19
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -101,20 +101,6 @@ LaTeX Info: Redefining \Relbar on input line 971.
 LaTeX Info: Redefining \[ on input line 2953.
 LaTeX Info: Redefining \] on input line 2954.
 )
-
-! LaTeX Error: File `xcolor.sty' not found.
-
-Type X to quit or <RETURN> to proceed,
-or enter new name. (Default extension: sty)
-
-Enter file name: 
-! Interruption.
-<to be read again> 
-                   }
-l.4 \newcommand
-               {\fvec}[1]{\vec{\vphantom{A}#1}}^^M
-? 
-
 (/nix/store/xps2fyi2zaizq4bmmm93283y7b0rz3pm-texlive-combined-2023-texmfdist/te
 x/latex/l3backend/l3backend-pdftex.def
 File: l3backend-pdftex.def 2024-01-04 L3 backend support: PDF output (pdfTeX)
@@ -123,53 +109,34 @@ File: l3backend-pdftex.def 2024-01-04 L3 backend support: PDF output (pdfTeX)
 ) (./test.aux)
 \openout1 = `test.aux'.
 
-LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 5.
-LaTeX Font Info:    ... okay on input line 5.
-LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 5.
-LaTeX Font Info:    ... okay on input line 5.
-LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 5.
-LaTeX Font Info:    ... okay on input line 5.
-LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 5.
-LaTeX Font Info:    ... okay on input line 5.
-LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 5.
-LaTeX Font Info:    ... okay on input line 5.
-LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 5.
-LaTeX Font Info:    ... okay on input line 5.
-LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 5.
-LaTeX Font Info:    ... okay on input line 5.
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 4.
+LaTeX Font Info:    ... okay on input line 4.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 4.
+LaTeX Font Info:    ... okay on input line 4.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 4.
+LaTeX Font Info:    ... okay on input line 4.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 4.
+LaTeX Font Info:    ... okay on input line 4.
+LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 4.
+LaTeX Font Info:    ... okay on input line 4.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 4.
+LaTeX Font Info:    ... okay on input line 4.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 4.
+LaTeX Font Info:    ... okay on input line 4.
  [1
 
 {/nix/store/50hpf4dhd7m05s6a1jd5wmc3siqvs5h5-texlive-combined-2023/share/texmf-
-var/fonts/map/pdftex/updmap/pdftex.map}] [2]
-! Undefined control sequence.
-<argument> ...= a_{s}b_{s} + a_{s}b_{i}\textcolor 
-                                                  {red}{i} + a_{s}b_{j}j + a...
-l.126 \end{split}
-                 
-? quit
-OK, entering \batchmode...
-! Undefined control sequence.
-<argument> ...= a_{s}b_{s} + a_{s}b_{i}\textcolor 
-                                                  {red}{i} + a_{s}b_{j}j + a...
-l.126 \end{split}
-                 
-The control sequence at the end of the top line
-of your error message was never \def'ed. If you have
-misspelled it (e.g., `\hobx'), type `I' and the correct
-spelling (e.g., `I\hbox'). Otherwise just continue,
-and I'll forget about whatever was undefined.
-
- [3] (./test.aux)
+var/fonts/map/pdftex/updmap/pdftex.map}] [2] [3] (./test.aux)
  ***********
 LaTeX2e <2023-11-01>
 L3 programming layer <2024-01-04>
  ***********
  ) 
 Here is how much of TeX's memory you used:
- 1179 strings out of 476126
- 18622 string characters out of 5790901
- 1944525 words of memory out of 5000000
- 23289 multiletter control sequences out of 15000+600000
+ 1174 strings out of 476126
+ 18554 string characters out of 5790901
+ 1946525 words of memory out of 5000000
+ 23284 multiletter control sequences out of 15000+600000
  563153 words of font info for 54 fonts, out of 8000000 for 9000
  14 hyphenation exceptions out of 8191
  56i,20n,65p,404b,189s stack positions out of 10000i,1000n,20000p,200000b,200000s
@@ -190,7 +157,7 @@ fb></nix/store/xps2fyi2zaizq4bmmm93283y7b0rz3pm-texlive-combined-2023-texmfdist
 0rz3pm-texlive-combined-2023-texmfdist/fonts/type1/public/amsfonts/cm/cmsy10.pf
 b></nix/store/xps2fyi2zaizq4bmmm93283y7b0rz3pm-texlive-combined-2023-texmfdist/
 fonts/type1/public/amsfonts/cm/cmsy7.pfb>
-Output written on test.pdf (3 pages, 124205 bytes).
+Output written on test.pdf (3 pages, 124510 bytes).
 PDF statistics:
  69 PDF objects out of 1000 (max. 8388607)
  41 compressed objects within 1 object stream
