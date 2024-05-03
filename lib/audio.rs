@@ -1,6 +1,9 @@
+use std::collections::VecDeque;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::ops::Deref;
+use std::io::{Cursor, Read};
+use byteorder::{NativeEndian, ReadBytesExt};
 use pulse::mainloop::threaded::Mainloop;
 use pulse::context::{Context, introspect::ServerInfo, FlagSet as ContextFlagSet};
 use pulse::stream::{Stream, FlagSet as StreamFlagSet};
@@ -135,6 +138,7 @@ pub fn process_audio() {
     // create WAV file
     wav::write_test_wav().unwrap();
 
+    // Low-latency transient detector
     // https://www.youtube.com/watch?v=QeC_cSnF2BM&t=286s
     let builder = DSPBuilder::new(44100);
     let low_pass = builder.build_first_order_filter(
@@ -142,18 +146,27 @@ pub fn process_audio() {
     );
     let absolute = builder.build_operator(|sample| sample.abs());
     let moving_average = builder.build_moving_average(100);
-    let slide = builder.build_slide(0., 1000.);
-    let amplifier_1 = builder.build_amplifier(4.);
-
-    let amplifier_2 = builder.build_amplifier(2.);
+    let slide = builder.build_slide(4000., 4000.);
+    let amplifier_1 = builder.build_amplifier(2.);
     let clip = builder.build_operator(|sample|
-        if sample < 0. { 0. }
-        else if sample > 1. { 1. }
-        else { sample }
+        if sample < 0. {0.}
+        else if sample > 1. {1.}
+        else {sample}
     );
+    let chain = builder.build_fx_chain();
+    let mut bm_chain = chain.borrow_mut();
+    bm_chain.append(low_pass);
+    bm_chain.append(absolute);
+    bm_chain.append(moving_average);
+    bm_chain.append(slide);
+    bm_chain.append(amplifier_1);
+    bm_chain.append(clip);
 
+    let sample_queue = Rc::new(RefCell::new(VecDeque::<f64>::new()));
     {
         let stream_ref = Rc::clone(&stream);
+        let chain_ref = chain.clone();
+        let sample_queue_ref = sample_queue.clone();
         stream.borrow_mut().set_read_callback(Some(Box::new(move |nb_bytes: usize| {
             let peek_result = stream_ref.borrow_mut().peek().expect("Failed to read stream");
             match peek_result {
@@ -165,6 +178,21 @@ pub fn process_audio() {
                 }
                 pulse::stream::PeekResult::Data(data) => {
                     println!("received {} bytes", data.len());
+                    let mut cursor = Cursor::new(data); 
+                    loop {
+                        if let Ok(sample) = cursor.read_i16::<NativeEndian>() {
+                            let float_sample = if sample > 0 {
+                                sample as f64 / std::i16::MAX as f64
+                            } else {
+                                -(sample as f64 / std::i16::MIN as f64)
+                            };
+                            sample_queue_ref.borrow_mut().push_back(
+                                chain_ref.borrow_mut().tick(float_sample)
+                            );
+                        } else {
+                            break;
+                        }
+                    }
                 }
             }
             stream_ref.borrow_mut().discard().expect("Failed to discard current fragment");
