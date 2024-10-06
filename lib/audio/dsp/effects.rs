@@ -2,6 +2,9 @@
 
 use super::*;
 
+use num::complex::{Complex, ComplexFloat};
+use std::f64::consts::PI;
+
 use std::collections::VecDeque;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -31,6 +34,21 @@ impl DSPBuilder {
         ) -> Rc<RefCell<SecondOrderFilter>>
     {
         Rc::new(RefCell::new(SecondOrderFilter::new(kind, cut_off, curve, self.sample_rate)))
+    }
+    pub fn build_biquad_filter(&self,
+        a1: f64, a2: f64,
+        b0: f64, b1: f64, b2: f64,
+    ) -> Rc<RefCell<BiquadFilter>>
+    {
+        Rc::new(RefCell::new(BiquadFilter::new(a1, a2, b0, b1, b2)))
+    }
+    pub fn build_butterworth_filter(&self,
+        kind: ButterworthFilterKind,
+        cut_off: Frequency,
+        order: u64
+    ) -> Rc<RefCell<ButterworthFilter>>
+    {
+        Rc::new(RefCell::new(ButterworthFilter::new(kind, cut_off, order, self.sample_rate)))
     }
     pub fn build_moving_average(&self,
         window_size: usize,
@@ -299,6 +317,147 @@ impl DSPMonoEffect for SecondOrderFilter {
         }
     }
 }
+
+//==============================================================================
+pub struct BiquadFilter {
+    pub a1: Parameter,
+    pub a2: Parameter,
+    pub b0: Parameter,
+    pub b1: Parameter,
+    pub b2: Parameter,
+    pub enabled: Parameter,
+    z1: f64,
+    z2: f64,
+}
+impl BiquadFilter {
+    fn new(
+        a1: f64, a2: f64,
+        b0: f64, b1: f64, b2: f64,
+        ) -> Self
+    {
+        Self {
+            a1: Parameter::new(a1),
+            a2: Parameter::new(a2),
+            b0: Parameter::new(b0),
+            b1: Parameter::new(b1),
+            b2: Parameter::new(b2),
+            enabled: Parameter::new(1.),
+            z1: 0.,
+            z2: 0.,
+        }
+    }
+}
+impl DSPMonoEffect for BiquadFilter {
+    fn tick(&mut self, sample: Mono) -> Mono {
+        let a1 = self.a1.real_value();
+        let a2 = self.a2.real_value();
+        let b0 = self.b0.real_value();
+        let b1 = self.b1.real_value();
+        let b2 = self.b2.real_value();
+        if self.enabled.real_value() == 0. {
+            return sample;
+        }
+
+        let output = b0 * sample + self.z1;
+        self.z1 = b1 * sample + self.z2 - a1 * output;
+        self.z2 = b2 * sample - a2 * output;
+        output
+    }
+}
+
+//==============================================================================
+pub enum ButterworthFilterKind {
+    LowPass,
+    HighPass,
+}
+pub struct ButterworthFilter {
+    kind: ButterworthFilterKind,
+    pub cut_off: Parameter,
+    pub order: Parameter,
+    pub enabled: Parameter,
+    old_cut_off: f64,
+    old_order: u64,
+    biquad_filters: Vec<BiquadFilter>,
+    sample_rate: u64,
+}
+impl ButterworthFilter {
+    fn new(
+        kind: ButterworthFilterKind,
+        cut_off: Frequency,
+        order: u64,
+        sample_rate: u64,
+        ) -> Self
+    {
+        Self {
+            sample_rate,
+            kind,
+            cut_off: Parameter::new(cut_off),
+            order: Parameter::new(order as f64),
+            enabled: Parameter::new(1.),
+            old_cut_off: cut_off + 1.,
+            old_order: order + 1,
+            biquad_filters: Vec::with_capacity(order as usize / 2),
+        }
+    }
+}
+impl DSPMonoEffect for ButterworthFilter {
+    fn tick(&mut self, sample: Mono) -> Mono {
+        let cut_off = self.cut_off.real_value();
+        let order = self.order.real_value() as u64;
+        let nb_conjugate_pair = order / 2;
+        if self.enabled.real_value() == 0. {
+            return sample;
+        }
+        let sample_rate = self.sample_rate as f64;
+
+        if cut_off != self.old_cut_off || order != self.old_order {
+            self.old_cut_off = cut_off;
+            self.old_order = order;
+            // logic
+            self.biquad_filters.clear();
+            let nb_conjugate_pair = order / 2;
+
+            let cut_off_radins = 2. * PI * cut_off;
+            let m = (cut_off_radins / sample_rate / 2.).tan();
+
+            // conjugate pole pairs
+            for i in 1..(nb_conjugate_pair + 1) {
+                let theta = PI * (2. * i as f64 - 1. + order as f64) / 2. / order as f64;
+                let real = theta.cos();
+                let common = 1. / (m*m -2.*real*m +1.);
+                let b0 = m*m * common;
+                let b1 = match self.kind {
+                    ButterworthFilterKind::LowPass => 2. * b0,
+                    ButterworthFilterKind::HighPass => -2. * b0,
+                };
+                let b2 = b0;
+                let a1 = 2. * (m*m -1.) * common;
+                let a2 = (m*m +2.*real*m +1.) * common;
+                self.biquad_filters.push(BiquadFilter::new(a1, a2, b0, b1, b2));
+                println!("{}, {}, {}, {}, {}", b0, b1, b2, a1, a2);
+            }
+
+            // real pole if order is impair
+            if order % 2 != 0 {
+                let b0 = m / (m +1.);
+                let b1 = match self.kind {
+                    ButterworthFilterKind::LowPass => b0,
+                    ButterworthFilterKind::HighPass => -b0,
+                };
+                let a1 = (m -1.) / (m +1.);
+                self.biquad_filters.push(BiquadFilter::new(a1, 0., b0, b1, 0.));
+                println!("{}, {}, {}, {}, {}", b0, b1, 0., a1, 0.);
+            }
+        }
+        
+        let mut output = sample;
+        for biquad in self.biquad_filters.iter_mut() {
+            output = biquad.tick(output);
+        }
+        output
+    }
+}
+
 //==============================================================================
 pub struct Slide {
     pub slide_up: Parameter,
@@ -572,6 +731,17 @@ mod tests {
     }
 
     #[test]
+    fn biquad_filter_zero_coefficients() {
+        let dsp_builder = DSPBuilder::new(SAMPLE_RATE);
+        let biquad_filter = dsp_builder.build_biquad_filter(0., 0., 0., 0., 0.);
+
+        let mut actual = biquad_filter.borrow_mut().tick(2.);
+        assert_eq!(actual, 0.);
+        actual = biquad_filter.borrow_mut().tick(5.);
+        assert_eq!(actual, 0.);
+    }
+
+    #[test]
     fn slide_distinct_up_down_4_samples() {
         const SLIDE_UP: f64 = 1. / 2.;
         const SLIDE_DOWN: f64 = 1. / 3.;
@@ -586,6 +756,15 @@ mod tests {
         assert_eq!(actual, 1. + (1. - 1.) / SLIDE_DOWN);
         actual = slide.borrow_mut().tick(-4.);
         assert_eq!(actual, 1. + (-4. - 1.) / SLIDE_DOWN);
+    }
+
+    #[test]
+    fn butterworth_low_pass_design() {
+        let dsp_builder = DSPBuilder::new(SAMPLE_RATE);
+        let butterworth_low_pass = dsp_builder.build_butterworth_filter(ButterworthFilterKind::HighPass, 1000., 8);
+
+        let actual = butterworth_low_pass.borrow_mut().tick(2.);
+        assert_eq!(actual, 5.);
     }
 }
 

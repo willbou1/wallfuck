@@ -59,27 +59,22 @@ pub fn write_test_wav() -> io::Result<()> {
     let h = dsp_builder.build_oscillator(WaveKind::Saw, 493.8833, 0.);
     h.borrow_mut().frequency.add_modulator(modulator.clone());
     h.borrow_mut().amplitude.add_modulator(adsr.clone());
-    let noise = dsp_builder.build_noise(NoiseKind::White, 0.);
+    let noise = dsp_builder.build_noise(NoiseKind::White, 1.0);
     noise.borrow_mut().amplitude.add_modulator(noise_adsr.clone());
 
     let parallel = dsp_builder.build_parallel();
-    parallel.borrow_mut().add(d.clone());
-    parallel.borrow_mut().add(e.clone());
-    parallel.borrow_mut().add(g.clone());
-    parallel.borrow_mut().add(h.clone());
+    //parallel.borrow_mut().add(d.clone());
+    //parallel.borrow_mut().add(e.clone());
+    //parallel.borrow_mut().add(g.clone());
+    //parallel.borrow_mut().add(h.clone());
     parallel.borrow_mut().add(noise.clone());
 
-    let high_pass = dsp_builder.build_first_order_filter(
-        FirstOrderFilterKind::HighPass,
-        150.);
-    let low_pass = dsp_builder.build_first_order_filter(
-        FirstOrderFilterKind::LowPass,
-        600.);
-    let cut_off_mod = dsp_builder.build_oscillator(WaveKind::Sine, 4., 400.);
-    low_pass.borrow_mut().cut_off.add_modulator(cut_off_mod.clone());
+    let butterworth = dsp_builder.build_butterworth_filter(ButterworthFilterKind::HighPass, 10000., 5);
+    let cut_off_mod = dsp_builder.build_oscillator(WaveKind::Sine, 2., 400.);
+    //low_pass.borrow_mut().cut_off.add_modulator(cut_off_mod.clone());
+    //butterworth.borrow_mut().cut_off.add_modulator(cut_off_mod.clone());
     let chain = dsp_builder.build_chain(parallel.clone());
-    chain.borrow_mut().fx_chain.insert(high_pass.clone());
-    chain.borrow_mut().fx_chain.insert(low_pass.clone());
+    chain.borrow_mut().fx_chain.insert(butterworth.clone());
 
     for i in 0..88200 {
         if i == 83000 {
