@@ -69,7 +69,7 @@ pub fn write_test_wav() -> io::Result<()> {
     //parallel.borrow_mut().add(h.clone());
     parallel.borrow_mut().add(noise.clone());
 
-    let butterworth = dsp_builder.build_butterworth_filter(ButterworthFilterKind::HighPass, 10000., 5);
+    let butterworth = dsp_builder.build_butterworth_filter(ButterworthFilterKind::LowPass, 500., 17);
     let cut_off_mod = dsp_builder.build_oscillator(WaveKind::Sine, 2., 400.);
     //low_pass.borrow_mut().cut_off.add_modulator(cut_off_mod.clone());
     //butterworth.borrow_mut().cut_off.add_modulator(cut_off_mod.clone());

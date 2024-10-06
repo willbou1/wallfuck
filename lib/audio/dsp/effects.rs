@@ -426,6 +426,10 @@ impl DSPMonoEffect for ButterworthFilter {
                 let real = theta.cos();
                 let common = 1. / (m*m -2.*real*m +1.);
                 let b0 = m*m * common;
+                let b0 = match self.kind {
+                    ButterworthFilterKind::LowPass => m*m * common,
+                    ButterworthFilterKind::HighPass => common,
+                };
                 let b1 = match self.kind {
                     ButterworthFilterKind::LowPass => 2. * b0,
                     ButterworthFilterKind::HighPass => -2. * b0,
@@ -439,7 +443,10 @@ impl DSPMonoEffect for ButterworthFilter {
 
             // real pole if order is impair
             if order % 2 != 0 {
-                let b0 = m / (m +1.);
+                let b0 = match self.kind {
+                    ButterworthFilterKind::LowPass => m / (m + 1.),
+                    ButterworthFilterKind::HighPass => 1. / (m + 1.),
+                };
                 let b1 = match self.kind {
                     ButterworthFilterKind::LowPass => b0,
                     ButterworthFilterKind::HighPass => -b0,
